@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Powerful Ball - Imagine what you could be buying instead!</title>
+<title>Powerful Ball v29 - Fixed Blank + Side By Side</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Righteous&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -464,10 +464,6 @@ function App(){
 
   return (
     <div className="min-h-screen w-full bg-[#f5f5f7] text-[#111] overflow-x-hidden">
-      <div className="fixed top-3 right-3 z-[60] flex items-center gap-2">
-        <button type="button" onClick={()=>{play("button"); setView("title");}} className="bg-white border border-[#e9d5ff] shadow rounded-full px-4 py-2 flex items-center gap-2 text-[13px] font-bold tracking-wide">BANK ${fmtMoney(bankCurrent)}</button>
-      </div>
-
       {view==="title" && (
         <div className="min-h-screen bg-[#07070e] text-white flex flex-col items-center justify-center relative overflow-hidden px-4 py-8">
           <canvas ref={titleCanvasRef} className="absolute inset-0 w-full h-full opacity-70" style={{filter:"blur(10px)"}} />

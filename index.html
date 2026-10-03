@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Powerful Ball</title>
+<title>Powerful Ball v29 - Fixed Blank + Side By Side</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Righteous&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -55,6 +55,9 @@ function App(){
   const [results,setResults]=useState(null);
   const [drumPhase,setDrumPhase]=useState("main");
   const [showStats,setShowStats]=useState(false);
+  const [showCelebration,setShowCelebration]=useState(false);
+  const confettiCanvasRef=useRef(null);
+  const fireworksCanvasRef=useRef(null);
   const [shake,setShake]=useState(false);
   const canvasRef=useRef(null);
   const titleCanvasRef=useRef(null);
@@ -233,6 +236,117 @@ function App(){
     return ()=>{ clearTimeout(t); cancelAnimationFrame(rafRef.current); rollingTimersRef.current.forEach(t=>clearTimeout(t)); };
   },[view,drumPhase]);
 
+  useEffect(()=>{
+    if(!showCelebration) return;
+    const canvasC = confettiCanvasRef.current;
+    if(!canvasC) return;
+    let rafC=0;
+    const ctx=canvasC.getContext("2d");
+    const resize=()=>{ canvasC.width=canvasC.offsetWidth*2; canvasC.height=canvasC.offsetHeight*2; };
+    resize();
+    const pieces=[];
+    const colors=["#fbbf24","#7b4dff","#2f4ea6","#e11d48","#4ade80","#fff"];
+    // Side confetti - fewer, around edges
+    for(let i=0;i<80;i++){
+      pieces.push({
+        x: (Math.random()<0.5? Math.random()*canvasC.width*0.25 : canvasC.width*0.75 + Math.random()*canvasC.width*0.25),
+        y: Math.random()*canvasC.height - canvasC.height*0.5,
+        r: (Math.random()*5+3),
+        c: colors[Math.floor(Math.random()*colors.length)],
+        vx: (Math.random()-0.5)*3,
+        vy: Math.random()*3+1,
+        rot: Math.random()*360,
+        vr: (Math.random()-0.5)*6,
+        shape: Math.random()>0.5?"rect":"circle"
+      });
+    }
+    const loop=()=>{
+      ctx.clearRect(0,0,canvasC.width,canvasC.height);
+      pieces.forEach(p=>{
+        p.x+=p.vx; p.y+=p.vy; p.vy+=0.05; p.rot+=p.vr;
+        if(p.y>canvasC.height+40){ p.y=-20; p.x=(Math.random()<0.5? Math.random()*canvasC.width*0.25 : canvasC.width*0.75 + Math.random()*canvasC.width*0.25); p.vy=Math.random()*3+1; }
+        ctx.save();
+        ctx.translate(p.x,p.y);
+        ctx.rotate(p.rot*Math.PI/180);
+        ctx.fillStyle=p.c;
+        if(p.shape==="rect") ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r*0.6);
+        else { ctx.beginPath(); ctx.arc(0,0,p.r/2,0,Math.PI*2); ctx.fill(); }
+        ctx.restore();
+      });
+      rafC=requestAnimationFrame(loop);
+    };
+    loop();
+    window.addEventListener("resize", resize);
+    return ()=>{ cancelAnimationFrame(rafC); window.removeEventListener("resize", resize); };
+  },[showCelebration]);
+
+  useEffect(()=>{
+    if(!showCelebration) return;
+    const canvas=fireworksCanvasRef.current;
+    if(!canvas) return;
+    const ctx=canvas.getContext("2d");
+    let raf=0;
+    const resize=()=>{ canvas.width=canvas.offsetWidth*2; canvas.height=canvas.offsetHeight*2; };
+    resize();
+    const rockets=[];
+    const particles=[];
+    function launch(){
+      rockets.push({
+        x: Math.random()*canvas.width*0.8 + canvas.width*0.1,
+        y: canvas.height,
+        vx: (Math.random()-0.5)*2,
+        vy: - (Math.random()*8+12),
+        color: `hsl(${Math.random()*60+20},100%,60%)`,
+        exploded:false
+      });
+      if(rockets.length<8 && showCelebration) setTimeout(launch, 400+Math.random()*600);
+    }
+    launch();
+    const loop=()=>{
+      ctx.fillStyle="rgba(7,7,14,0.18)";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      // rockets
+      for(let i=rockets.length-1;i>=0;i--){
+        const r=rockets[i];
+        r.x+=r.vx; r.y+=r.vy; r.vy+=0.25;
+        ctx.fillStyle=r.color;
+        ctx.beginPath(); ctx.arc(r.x,r.y,3,0,Math.PI*2); ctx.fill();
+        if(r.vy> -2 && !r.exploded){
+          r.exploded=true;
+          for(let j=0;j<70;j++){
+            const ang=Math.random()*Math.PI*2;
+            const sp=Math.random()*8+2;
+            particles.push({
+              x:r.x, y:r.y,
+              vx: Math.cos(ang)*sp,
+              vy: Math.sin(ang)*sp,
+              life: 60+Math.random()*30,
+              color: r.color,
+              size: Math.random()*3+1
+            });
+          }
+          rockets.splice(i,1);
+        }
+      }
+      // particles
+      for(let i=particles.length-1;i>=0;i--){
+        const p=particles[i];
+        p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.vx*=0.99; p.life--;
+        ctx.globalAlpha = Math.max(0, p.life/60);
+        ctx.fillStyle=p.color;
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha=1;
+        if(p.life<=0) particles.splice(i,1);
+      }
+      raf=requestAnimationFrame(loop);
+    };
+    loop();
+    const onResize=()=>resize();
+    window.addEventListener("resize", onResize);
+    return ()=>{ cancelAnimationFrame(raf); window.removeEventListener("resize", onResize); };
+  },[showCelebration]);
+
+
   function prizeFor(mm,pb){
     if(mm===7 && pb) return {prize:drawJackpot||jackpot, division:1};
     if(mm===7) return {prize:50000, division:2};
@@ -327,6 +441,7 @@ function App(){
     const wMain=randPicks(7,1,35); const wPB=randInt(1,20);
     setDrawJackpot(jackpot);
     setWinning({main:wMain, pb:wPB});
+    setShowCelebration(false);
     setReveal(0); setDrumPhase("main"); ballsRef.current=[];
     const ne={}; games.forEach((_,i)=> ne[i]=true); setDrawExpanded(ne); setDrawExpandAll(true);
     play("rollingNotes");
@@ -379,7 +494,7 @@ function App(){
       setReveal(8);
       play("powerful ballReveal");
       setTimeout(()=>{ play("ballMatch"); setShake(true); setTimeout(()=>setShake(false),600);
-        setTimeout(()=>{ if(total>0) play("win"); else play("lose"); if(divWinsThisDraw[1]>0){ setJackpot(randInt(4000000,10000000)); } else { setJackpot(j=>j+500000+randInt(0,500000)); } },600);
+        setTimeout(()=>{ if(total>0){ play("win"); setShowCelebration(true); } else play("lose"); if(divWinsThisDraw[1]>0){ setJackpot(randInt(4000000,10000000)); } else { setJackpot(j=>j+500000+randInt(0,500000)); } },600);
       },700);
     },9600);
   }
@@ -574,12 +689,57 @@ function App(){
         <div className="min-h-screen bg-[#07070e] text-white flex flex-col">
           <div className="h-[56px] flex items-center justify-between px-4 border-b border-white/10"><div className="text-[12px] font-bold tracking-[0.22em] text-white/40">POWERFUL BALL</div><div className="text-[11px] text-white/50">{reveal}/8</div></div>
           <div className="flex-1 max-w-[560px] mx-auto w-full px-4 py-5 flex flex-col items-center space-y-4">
-            <div className={`w-full relative ${shake?"shake":""}`}>
-              <div className={`w-full border-2 rounded-[24px] p-3 flex flex-col items-center justify-center ${drumPhase==="main"?"bg-[radial-gradient(ellipse_at_center,_rgba(123,77,255,0.22),_transparent_70%)] border-[#fbbf24]/40":"bg-[radial-gradient(ellipse_at_center,_rgba(255,40,40,0.35),_transparent_70%)] border-red-500/60"}`}>
-                <canvas ref={canvasRef} className="rounded-[18px] bg-[#0c0c18]" />
+            <div className="w-full relative min-h-[320px]">
+              {/* Drum - fades out on win */}
+              <div className={`w-full relative transition-all duration-700 ease-in-out ${shake?"shake":""} ${showCelebration && results?.winAmount>0 ? "opacity-0 scale-90 pointer-events-none absolute inset-0" : "opacity-100 scale-100 relative"}`}>
+                <div className={`w-full border-2 rounded-[24px] p-3 flex flex-col items-center justify-center ${drumPhase==="main"?"bg-[radial-gradient(ellipse_at_center,_rgba(123,77,255,0.22),_transparent_70%)] border-[#fbbf24]/40":"bg-[radial-gradient(ellipse_at_center,_rgba(255,40,40,0.35),_transparent_70%)] border-red-500/60"}`}>
+                  <canvas ref={canvasRef} className="rounded-[18px] bg-[#0c0c18]" />
+                </div>
+                <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 z-20"><div className={`bg-white text-black text-[12px] font-extrabold rounded-full px-4 py-2 shadow border-2 border-[#fbbf24] whitespace-nowrap ${reveal>0?"pop":""}`}>{reveal===0?"Rolling...":reveal<7?`Ball ${reveal} drawn!`:reveal===7?"and the powerful ball is...":`Powerful Ball drawn! - DRAW COMPLETE!`}</div></div>
               </div>
-              <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 z-20"><div className={`bg-white text-black text-[12px] font-extrabold rounded-full px-4 py-2 shadow border-2 border-[#fbbf24] whitespace-nowrap ${reveal>0?"pop":""}`}>{reveal===0?"Rolling...":reveal<7?`Ball ${reveal} drawn!`:reveal===7?"and the powerful ball is...":`Powerful Ball drawn! - DRAW COMPLETE!`}</div></div>
+
+              {/* Winning ticket - fades in where drum was */}
+              {showCelebration && results && results.winAmount>0 && (
+                <div className="absolute inset-0 flex items-center justify-center transition-all duration-700 ease-out opacity-100 scale-100 animate-[pop_0.6s_ease]">
+                  <div className="w-full bg-gradient-to-br from-[#fbbf24] via-[#f59e0b] to-[#d97706] rounded-[24px] p-[3px] shadow-[0_0_60px_rgba(251,191,36,0.9)]">
+                    <div className="bg-[#111] rounded-[21px] p-6 text-center">
+                      <div className="text-[36px]">🎉 💰 🎆</div>
+                      <div className="bebas text-[52px] leading-[0.9] text-[#fbbf24] mt-2">YOU WON!</div>
+                      <div className="righteous text-[28px] text-white mt-2">{"$" + fmtMoney(results.winAmount)}</div>
+                      <div className="mt-1 text-[11px] tracking-[0.25em] text-white/40 uppercase"></div>
+                      <div className="mt-4 space-y-3">
+                        {games.map((g,idx)=>{
+                          const mm=g.main.filter(x=>winning.main.includes(x)).length;
+                          const pbm=g.pb===winning.pb;
+                          const {prize,division}=prizeFor(mm,pbm);
+                          if(division===0) return null;
+                          return (
+                            <div key={idx} className="bg-white rounded-[16px] p-4 border-2 border-[#fbbf24] shadow-[0_0_30px_rgba(251,191,36,0.5)] text-left">
+                              <div className="flex justify-between items-center">
+                                <div className="text-[12px] font-extrabold tracking-widest text-[#7b4dff]">TICKET {idx+1} • DIV {division}</div>
+                                <div className="text-[11px] bg-[#16a34a] text-white rounded-full px-3 py-1 font-bold">{`$${fmtMoney(prize)}`}</div>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-2 items-center justify-center">
+                                {g.main.map(num=>{
+                                  const hit=winning.main.includes(num);
+                                  return <div key={num} className={`w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold border-2 ${hit?"bg-[#14532d] border-[#4ade80] text-white shadow-[0_0_12px_#4ade80] scale-110":"bg-white border-gray-200 text-gray-400"}`}>{num}</div>
+                                })}
+                                <div className="w-px h-9 bg-[#fbbf24]/50 mx-1"/>
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold border-2 ${pbm?"bg-[#14532d] border-[#4ade80] text-white shadow-[0_0_12px_#4ade80] scale-110":"bg-white border-gray-200 text-gray-400"}`}>{g.pb}</div>
+                              </div>
+                              <div className="mt-3 text-center text-[10px] text-gray-500">Matched {mm}/7 {pbm?" + Powerful Ball":""}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-4 text-[10px] text-white/30"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+
+
 
             {winning && (
               <div className="w-full mt-14 space-y-4">
@@ -626,7 +786,6 @@ function App(){
                     })}
                   </div>
                 </div>
-
                 {/* inline SEE RESULTS removed - using fixed bar only */}
                 {reveal>=8 && (
                   <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#07070e]/95 backdrop-blur border-t border-[#fbbf24]/30 p-3">
@@ -649,9 +808,9 @@ function App(){
           <div className="relative z-10 max-w-[560px] mx-auto space-y-4">
             <div className={`rounded-[20px] p-6 text-center border-2 ${thisNet>=0?"bg-[#14532d] border-[#166534]":"bg-[#7f1d1d] border-[#991b1b]"}`}>
               <div className="text-[10px] font-black tracking-[0.25em] uppercase text-white/70">THIS ROUND • {mode}</div>
-              <div className="mt-2 bebas text-[60px] leading-[0.85] text-white" style={{WebkitTextStroke:"1px black"}}>{thisNet>=0?`+ $${fmtMoney(thisNet)}`:`- $${fmtMoney(Math.abs(thisNet))}`}</div>
+              <div className={`mt-2 bebas text-[60px] leading-[0.85] ${thisNet>=0?"text-[#4ade80]":"text-white"}`} style={{WebkitTextStroke:"1px black"}}>{thisNet>=0?"+ $" + fmtMoney(thisNet):"- $" + fmtMoney(Math.abs(thisNet))}</div>
               <div className="righteous text-[20px] mt-1 uppercase text-white/90">{thisNet>=0?"PROFIT!" : "LOSS"}</div>
-              <div className="mt-3 inline-flex bg-black/30 rounded-full px-4 py-1.5 text-[11px] font-bold text-white">Spent $${fmtMoney(totalCost)} • Won $${fmtMoney((results?.winAmount||0))} • {equivGames} games</div>
+              <div className="mt-3 inline-flex bg-black/30 rounded-full px-4 py-1.5 text-[11px] font-bold text-white">Spent {"$" + fmtMoney(totalCost)} • Won {"$" + fmtMoney(results?.winAmount||0)} • {equivGames} games</div>
             </div>
 
             
@@ -662,13 +821,13 @@ function App(){
                   <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase">{thisNet>=0 ? "THIS ROUND PROFIT COULD BUY..." : "THIS ROUND LOSS COULD HAVE BOUGHT..."}</div>
                   <div className="mt-3">
                     <div className="bg-gradient-to-br from-[#111] to-[#222] rounded-[18px] p-4 text-white border border-[#333]">
-                      <div className="text-[10px] tracking-[0.2em] opacity-60 uppercase">{haulItem.count>1?`${fmtInt(haulItem.count)} × ${haulItem.name}`:haulItem.name} • ${fmtMoney(haulItem.price)} ea</div>
+                      <div className="text-[10px] tracking-[0.2em] opacity-60 uppercase">{haulItem.count>1?`${fmtInt(haulItem.count)} × ${haulItem.name}`:haulItem.name} • {"$" + fmtMoney(haulItem.price) + " EA"}</div>
                       <div className="mt-2 flex items-start gap-2">
                         <div className="text-[28px]">{haulItem.emoji}</div>
                         <div>
                           <div className="text-[15px] font-extrabold leading-[1.1]">{haulItem.count>1?`${fmtInt(haulItem.count)} × `:''}{haulItem.name}</div>
                           <div className="mt-1 text-[10px] opacity-80">{haulItem.desc}</div>
-                          <div className="mt-2 inline-flex bg-white/10 rounded-full px-2 py-1 text-[10px] font-bold">${fmtMoney(absNet)} ≈ ${fmtMoney(haulItem.count>1?haulItem.total:haulItem.price)}</div>
+                          <div className="mt-2 inline-flex bg-white/10 rounded-full px-2 py-1 text-[10px] font-bold">{"$" + fmtMoney(absNet) + " ≈ $" + fmtMoney(haulItem.count>1?haulItem.total:haulItem.price)}</div>
                           <div className="mt-1 text-[9px] opacity-60">This round: {thisNet>=0?'+':''}${fmtMoney(thisNet)} • Total: {totalNet>=0?'+':''}${fmtMoney(totalNet)} same item</div>
                         </div>
                       </div>
@@ -681,13 +840,13 @@ function App(){
                     <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase">{thisNet>=0 ? "THIS ROUND PROFIT COULD BUY..." : "THIS ROUND LOSS COULD HAVE BOUGHT..."}</div>
                     <div className="mt-3">
                       <div className="bg-gradient-to-br from-[#111] to-[#222] rounded-[18px] p-4 text-white border border-[#333]">
-                        <div className="text-[10px] tracking-[0.2em] opacity-60 uppercase">{haulItem.count>1?`${fmtInt(haulItem.count)} × ${haulItem.name}`:haulItem.name} • ${fmtMoney(haulItem.price)} ea</div>
+                        <div className="text-[10px] tracking-[0.2em] opacity-60 uppercase">{haulItem.count>1?`${fmtInt(haulItem.count)} × ${haulItem.name}`:haulItem.name} • {"$" + fmtMoney(haulItem.price) + " EA"}</div>
                         <div className="mt-2 flex items-start gap-2">
                           <div className="text-[28px]">{haulItem.emoji}</div>
                           <div>
                             <div className="text-[15px] font-extrabold leading-[1.1]">{haulItem.count>1?`${fmtInt(haulItem.count)} × `:''}{haulItem.name}</div>
                             <div className="mt-1 text-[10px] opacity-80">{haulItem.desc}</div>
-                            <div className="mt-2 inline-flex bg-white/10 rounded-full px-2 py-1 text-[10px] font-bold">${fmtMoney(absNet)} ≈ ${fmtMoney(haulItem.count>1?haulItem.total:haulItem.price)}</div>
+                            <div className="mt-2 inline-flex bg-white/10 rounded-full px-2 py-1 text-[10px] font-bold">{"$" + fmtMoney(absNet) + " ≈ $" + fmtMoney(haulItem.count>1?haulItem.total:haulItem.price)}</div>
                             <div className="mt-1 text-[9px] opacity-60">This round: {thisNet>=0?'+':''}${fmtMoney(thisNet)} (Spent $${fmtMoney(totalCost)} • Won $${fmtMoney(results?.winAmount||0)})</div>
                           </div>
                         </div>
@@ -698,14 +857,14 @@ function App(){
                     <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase">{totalNet>=0 ? "TOTAL PROFIT COULD BUY..." : "TOTAL LOSS COULD HAVE BOUGHT..."}</div>
                     <div className="mt-3">
                       <div className="bg-gradient-to-br from-[#1a1a2e] to-[#2a1a3e] rounded-[18px] p-4 text-white border border-[#7b4dff]/30">
-                        <div className="text-[10px] tracking-[0.2em] opacity-60 uppercase">{haulItemTotal.count>1?`${fmtInt(haulItemTotal.count)} × ${haulItemTotal.name}`:haulItemTotal.name} • ${fmtMoney(haulItemTotal.price)} ea</div>
+                        <div className="text-[10px] tracking-[0.2em] opacity-60 uppercase">{haulItemTotal.count>1?`${fmtInt(haulItemTotal.count)} × ${haulItemTotal.name}`:haulItemTotal.name} • {"$" + fmtMoney(haulItemTotal.price) + " EA"}</div>
                         <div className="mt-2 flex items-start gap-2">
                           <div className="text-[28px]">{haulItemTotal.emoji}</div>
                           <div>
                             <div className="text-[15px] font-extrabold leading-[1.1]">{haulItemTotal.count>1?`${fmtInt(haulItemTotal.count)} × `:''}{haulItemTotal.name}</div>
                             <div className="mt-1 text-[10px] opacity-80">{haulItemTotal.desc}</div>
-                            <div className="mt-2 inline-flex bg-[#7b4dff]/20 rounded-full px-2 py-1 text-[10px] font-bold">${fmtMoney(absTotalNet)} ≈ ${fmtMoney(haulItemTotal.count>1?haulItemTotal.total:haulItemTotal.price)}</div>
-                            <div className="mt-1 text-[9px] opacity-60">Running total: {totalNet>=0?'+':''}${fmtMoney(totalNet)} (Spent $${fmtMoney(spent)} • Won $${fmtMoney(won)} • {fmtInt(totalGamesPlayed)} games)</div>
+                            <div className="mt-2 inline-flex bg-[#7b4dff]/20 rounded-full px-2 py-1 text-[10px] font-bold">{"$" + fmtMoney(absTotalNet) + " ≈ $" + fmtMoney(haulItemTotal.count>1?haulItemTotal.total:haulItemTotal.price)}</div>
+                            <div className="mt-1 text-[9px] opacity-60">Running total: {totalNet>=0?'+':''}${fmtMoney(totalNet)} (Spent {"$" + fmtMoney(spent)} • Won {"$" + fmtMoney(won)} • {fmtInt(totalGamesPlayed)} games)</div>
                           </div>
                         </div>
                       </div>
@@ -724,7 +883,7 @@ function App(){
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Bankroll</div><div className={`text-[18px] font-extrabold mt-1 ${bankCurrent>=bankStart?"text-[#4ade80]":"text-[#f87171]"}`}>${fmtMoney(bankCurrent)}</div><div className="text-[10px] opacity-60 mt-1">Start ${fmtMoney(bankStart)} • Net {fmtMoney((bankCurrent-bankStart))}</div></div>
-                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">ROI</div><div className={`text-[18px] font-extrabold mt-1 ${roi>=0?"text-[#4ade80]":"text-[#f87171]"}`}>{fmtMoney(roi)}%</div><div className="text-[10px] opacity-60 mt-1">Spent $${fmtMoney(spent)} • Won $${fmtMoney(won)}</div></div>
+                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">ROI</div><div className={`text-[18px] font-extrabold mt-1 ${roi>=0?"text-[#4ade80]":"text-[#f87171]"}`}>{fmtMoney(roi)}%</div><div className="text-[10px] opacity-60 mt-1">Spent {"$" + fmtMoney(spent)} • Won {"$" + fmtMoney(won)}</div></div>
                   <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Hit Rate</div><div className="text-[18px] font-extrabold mt-1 text-white">{fmtMoney(hitRate)}%</div><div className="text-[10px] opacity-60 mt-1">{totalDivWins} wins / {totalGamesPlayed} games</div></div>
                   <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Avg Win</div><div className="text-[18px] font-extrabold mt-1 text-white">${totalDivWins>0?(won/totalDivWins).toLocaleString('en-AU', {minimumFractionDigits:2, maximumFractionDigits:2}):"0.00"}</div><div className="text-[10px] opacity-60 mt-1">Biggest ${fmtMoney(biggestWin)} • Losing streak {maxLosingStreak}</div></div>
                 </div>

@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Powerful Ball v27 - Accounting Commas</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Righteous&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#f5f5f7}
+.bebas{font-family:'Bebas Neue',Impact,sans-serif}
+.righteous{font-family:'Righteous',cursive}
+@keyframes blink{0%,49%{background:#fbbf24;box-shadow:0 0 12px #fbbf24}50%,100%{background:#fff;box-shadow:0 0 8px #fff}}
+.marquee-bulb{width:14px;height:14px;border-radius:9999px;animation:blink 0.8s infinite;flex-shrink:0}
+.marquee-bulb:nth-child(even){animation-delay:0.4s}
+button{-webkit-tap-highlight-color:transparent}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.shake{animation:shake 0.15s ease-in-out 3}
+@keyframes pop{0%{transform:scale(0.5)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
+.pop{animation:pop 0.35s cubic-bezier(0.175,0.885,0.32,1.275)}
+.ticket-shine{background:linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); background-size:200% 100%; animation:ticketShine 2.5s infinite}
+@keyframes ticketShine{0%{background-position:-200% 0}100%{background-position:200% 0}}
+</style>
+</head>
+<body class="bg-[#f5f5f7]">
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useMemo}=React;
+function randInt(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+function randPicks(k,lo,hi,exclude=[]){const s=new Set(exclude);const r=[];while(r.length<k){let v=randInt(lo,hi);if(!s.has(v)){s.add(v);r.push(v)}}return r.sort((a,b)=>a-b)}
+function combos(n,k){if(k>n)return 0;if(k===0||k===n)return 1;k=Math.min(k,n-k);let c=1;for(let i=1;i<=k;i++)c=c*(n-k+i)/i;return Math.round(c)}
+
+function App(){
+  const [view,setView]=useState("title");
+  const [mode,setMode]=useState("Standard");
+  const [sysSize,setSysSize]=useState(8);
+  const [pickType,setPickType]=useState("Pick6");
+  const [gameCount,setGameCount]=useState(4);
+  const [games,setGames]=useState(()=>[{main:[],pb:null},{main:[],pb:null},{main:[],pb:null},{main:[],pb:null}]);
+  const [expanded,setExpanded]=useState(()=>({0:false,1:false,2:false,3:false}));
+  const [expandAll,setExpandAll]=useState(false);
+  const [drawExpanded,setDrawExpanded]=useState(()=>({}));
+  const [drawExpandAll,setDrawExpandAll]=useState(true);
+  const [bankStart,setBankStart]=useState(1000);
+  const [borrow,setBorrow]=useState(0);
+  const [spent,setSpent]=useState(0);
+  const [won,setWon]=useState(0);
+  const [jackpot,setJackpot]=useState(()=>randInt(4000000,80000000));
+  const [drawJackpot,setDrawJackpot]=useState(0);
+  const [winning,setWinning]=useState(null);
+  const [reveal,setReveal]=useState(0);
+  const [results,setResults]=useState(null);
+  const [drumPhase,setDrumPhase]=useState("main");
+  const [showStats,setShowStats]=useState(false);
+  const [shake,setShake]=useState(false);
+  const canvasRef=useRef(null);
+  const titleCanvasRef=useRef(null);
+  const finalCanvasRef=useRef(null);
+  const ballsRef=useRef([]);
+  const titleBallsRef=useRef([]);
+  const finalBallsRef=useRef([]);
+  const rafRef=useRef(0);
+  const titleRafRef=useRef(0);
+  const finalRafRef=useRef(0);
+  const audioRef=useRef(null);
+  const gainRef=useRef(null);
+  const rollingTimersRef=useRef([]);
+  
+  // Pro stats
+  const [totalDraws,setTotalDraws]=useState(0);
+  const [totalGamesPlayed,setTotalGamesPlayed]=useState(0);
+  const [divCounts,setDivCounts]=useState({1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0});
+  const [divPrizeTotals,setDivPrizeTotals]=useState({1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0});
+  const [numberPickFreq,setNumberPickFreq]=useState(()=>Array(35).fill(0));
+  const [pbPickFreq,setPbPickFreq]=useState(()=>Array(20).fill(0));
+  const [winningFreq,setWinningFreq]=useState(()=>Array(35).fill(0));
+  const [pbWinningFreq,setPbWinningFreq]=useState(()=>Array(20).fill(0));
+  const [biggestWin,setBiggestWin]=useState(0);
+  const [losingStreak,setLosingStreak]=useState(0);
+  const [maxLosingStreak,setMaxLosingStreak]=useState(0);
+
+  const pricePerGame=1.40;
+
+  const fmtMoney = (n)=> Number(n||0).toLocaleString('en-AU', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const fmtInt = (n)=> Number(n||0).toLocaleString('en-AU');
+  const fmtMoneySign = (n)=> `$${fmtMoney(n)}`;
+
+
+  const totalCost=useMemo(()=>{
+    if(mode==="Standard") return gameCount*pricePerGame;
+    if(mode==="System") return combos(sysSize,7)*pricePerGame;
+    if(mode==="PowerHit") return 20*pricePerGame;
+    if(mode==="PowerHitSystem") return combos(sysSize,7)*20*pricePerGame;
+    if(mode==="Pick") return pickType==="Pick6"?29*pricePerGame:435*pricePerGame;
+    return 0;
+  },[mode,gameCount,sysSize,pickType]);
+  const equivGames=useMemo(()=>{
+    if(mode==="Standard") return gameCount;
+    if(mode==="System") return combos(sysSize,7);
+    if(mode==="PowerHit") return 20;
+    if(mode==="PowerHitSystem") return combos(sysSize,7)*20;
+    if(mode==="Pick") return pickType==="Pick6"?29:435;
+    return 0;
+  },[mode,gameCount,sysSize,pickType]);
+
+  function ensureAudio(){
+    try{
+      if(!audioRef.current){
+        const ctx=new (window.AudioContext||window.webkitAudioContext)();
+        const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-24; comp.knee.value=30; comp.ratio.value=12; comp.attack.value=0.003; comp.release.value=0.25; comp.connect(ctx.destination);
+        const g=ctx.createGain(); g.gain.value=0.38; g.connect(comp);
+        audioRef.current=ctx; gainRef.current=g;
+      }
+      if(audioRef.current.state!=="running") audioRef.current.resume();
+      return audioRef.current;
+    }catch{ return null; }
+  }
+  function play(t, opts={}){
+    try{
+      const ctx=ensureAudio(); const g=gainRef.current;
+      if(!ctx||!g) return;
+      const now=ctx.currentTime;
+      function go(freq,vol,dur,type="sine",slide){
+        const oc=ctx.createOscillator(); const gc=ctx.createGain();
+        oc.type=type; oc.frequency.setValueAtTime(freq, now + (slide?.delay||0));
+        if(slide?.to){ oc.frequency.exponentialRampToValueAtTime(slide.to, now+(slide.delay||0)+slide.time); }
+        gc.gain.setValueAtTime(0.0001, now+(slide?.delay||0));
+        gc.gain.linearRampToValueAtTime(vol, now+(slide.delay||0)+0.02);
+        gc.gain.exponentialRampToValueAtTime(0.0001, now+(slide.delay||0)+dur);
+        oc.connect(gc); gc.connect(g);
+        oc.start(now+(slide.delay||0)); oc.stop(now+(slide.delay||0)+dur+0.08);
+      }
+      if(t==="tap"){ go(220,0.12,0.12); }
+      if(t==="button"){ go(360,0.20,0.24,"sine",{to:1200, time:0.16, delay:0}); }
+      if(t==="fancyStart"){ [261.63,329.63,392,523.25,659.25,783.99,1046.5].forEach((f,i)=> go(f,0.32,1.0,"sine",{delay:i*0.08})); }
+      if(t==="rollingNotes"){
+        rollingTimersRef.current.forEach(t=> clearTimeout(t)); rollingTimersRef.current=[];
+        const scale=[130.81,146.83,164.81,196.00,220.00,261.63,293.66,329.63,392.00,440.00,523.25];
+        for(let i=0;i<22;i++){
+          const timer=setTimeout(()=>{
+            const ctx2=audioRef.current; const g2=gainRef.current;
+            if(!ctx2||!g2) return;
+            const freq=scale[Math.floor(Math.random()*scale.length)] * (0.8+Math.random()*0.4);
+            const oc=ctx2.createOscillator(); const gc=ctx2.createGain();
+            oc.type=i%3===0?"sine":i%3===1?"triangle":"square";
+            oc.frequency.setValueAtTime(freq, ctx2.currentTime);
+            gc.gain.setValueAtTime(0.0001, ctx2.currentTime);
+            gc.gain.linearRampToValueAtTime(0.18+Math.random()*0.12, ctx2.currentTime+0.01);
+            gc.gain.exponentialRampToValueAtTime(0.0001, ctx2.currentTime+0.25+Math.random()*0.2);
+            oc.connect(gc); gc.connect(g2);
+            oc.start(); oc.stop(ctx2.currentTime+0.35);
+          }, i*320 + Math.random()*180);
+          rollingTimersRef.current.push(timer);
+        }
+      }
+      if(t==="ballReveal"){ const base=300+(opts.index||0)*80; go(base,0.28,0.45,"sine",{to:base*2.2, time:0.3}); }
+      if(t==="ballMatch"){ go(880,0.38,0.45); go(1320,0.38,0.55,"sine",{delay:0.10}); }
+      if(t==="ballMiss"){ go(180,0.24,0.30); }
+      if(t==="powerful ballReveal"){ go(440,0.36,0.5,"sine",{to:880, time:0.4}); go(660,0.32,0.6,"sawtooth",{delay:0.12}); }
+      if(t==="win"){ [523,659,784,1046,1318].forEach((f,i)=> go(f,0.30,0.9,"sine",{delay:i*0.10})); }
+      if(t==="lose"){ [300,240,180,120].forEach((f,i)=> go(f,0.24,0.5,"sine",{delay:i*0.14})); }
+    }catch{}
+  }
+
+  useEffect(()=>{
+    if(view!=="title"){ if(titleRafRef.current) cancelAnimationFrame(titleRafRef.current); return; }
+    const c=titleCanvasRef.current; if(!c) return;
+    const dpr=window.devicePixelRatio||1;
+    const w=c.parentElement?.clientWidth||520; const h=520;
+    c.width=w*dpr; c.height=h*dpr; c.style.width=w+"px"; c.style.height=h+"px";
+    const ctx=c.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+    if(titleBallsRef.current.length===0){ const arr=[]; for(let i=1;i<=15;i++){arr.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-0.5)*1.2,vy:(Math.random()-0.5)*1.2,r:14+Math.random()*12,num:randInt(1,35)})} titleBallsRef.current=arr; }
+    let last=performance.now();
+    const loop=(t)=>{
+      const dt=Math.min((t-last)/1000,0.033); last=t;
+      titleBallsRef.current.forEach(b=>{ b.x+=b.vx*dt*60; b.y+=b.vy*dt*60; if(b.x-b.r<0||b.x+b.r>w){b.vx*=-1; b.x=Math.max(b.r,Math.min(w-b.r,b.x))} if(b.y-b.r<0||b.y+b.r>h){b.vy*=-1; b.y=Math.max(b.r,Math.min(h-b.r,b.y))} });
+      ctx.clearRect(0,0,w,h);
+      titleBallsRef.current.forEach(b=>{ const grad=ctx.createRadialGradient(b.x-3,b.y-3,2,b.x,b.y,b.r); grad.addColorStop(0,"#fff"); grad.addColorStop(0.2,"#fff8e8"); grad.addColorStop(0.5,"#9d7cff"); grad.addColorStop(1,"#5a2fbf"); ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill(); });
+      titleRafRef.current=requestAnimationFrame(loop);
+    };
+    titleRafRef.current=requestAnimationFrame(loop);
+    return ()=> cancelAnimationFrame(titleRafRef.current);
+  },[view]);
+
+  useEffect(()=>{
+    if(view!=="result"){ if(finalRafRef.current) cancelAnimationFrame(finalRafRef.current); return; }
+    const c=finalCanvasRef.current; if(!c) return;
+    const dpr=window.devicePixelRatio||1;
+    const w=c.parentElement?.clientWidth||540; const h=800;
+    c.width=w*dpr; c.height=h*dpr; c.style.width=w+"px"; c.style.height=h+"px";
+    const ctx=c.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+    if(finalBallsRef.current.length===0){ const arr=[]; for(let i=1;i<=18;i++){arr.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-0.5)*0.9,vy:(Math.random()-0.5)*0.9,r:12+Math.random()*14,num:randInt(1,35)})} finalBallsRef.current=arr; }
+    let last=performance.now();
+    const loop=(t)=>{
+      const dt=Math.min((t-last)/1000,0.033); last=t;
+      finalBallsRef.current.forEach(b=>{ b.x+=b.vx*dt*60; b.y+=b.vy*dt*60; if(b.x-b.r<0||b.x+b.r>w){b.vx*=-1; b.x=Math.max(b.r,Math.min(w-b.r,b.x))} if(b.y-b.r<0||b.y+b.r>h){b.vy*=-1; b.y=Math.max(b.r,Math.min(h-b.r,b.y))} });
+      ctx.clearRect(0,0,w,h);
+      finalBallsRef.current.forEach(b=>{ const grad=ctx.createRadialGradient(b.x-3,b.y-3,2,b.x,b.y,b.r); grad.addColorStop(0,"#fff"); grad.addColorStop(0.2,"#fff8e8"); grad.addColorStop(0.5,"#9d7cff"); grad.addColorStop(1,"#5a2fbf"); ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill(); });
+      finalRafRef.current=requestAnimationFrame(loop);
+    };
+    finalRafRef.current=requestAnimationFrame(loop);
+    return ()=> cancelAnimationFrame(finalRafRef.current);
+  },[view]);
+
+  useEffect(()=>{
+    if(view!=="draw"){ if(rafRef.current) cancelAnimationFrame(rafRef.current); rollingTimersRef.current.forEach(t=>clearTimeout(t)); return; }
+    const init=()=>{
+      const c=canvasRef.current; if(!c) return;
+      const dpr=window.devicePixelRatio||1;
+      const pw=c.parentElement?.clientWidth||360; const size=Math.min(pw,360);
+      c.width=size*dpr; c.height=size*dpr; c.style.width=size+"px"; c.style.height=size+"px";
+      const ctx=c.getContext("2d"); ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr);
+      const S=size, cx=S/2, cy=S/2, outerR=S/2-14;
+      const count = drumPhase==="main"?35:20;
+      const rad = 13;
+      if(ballsRef.current.length!==count){ const arr=[]; for(let i=1;i<=count;i++){ const ang=Math.random()*Math.PI*2; const r=Math.random()*(outerR-rad-14); arr.push({x:cx+Math.cos(ang)*r, y:cy+Math.sin(ang)*r, vx:(Math.random()-0.5)*3.5, vy:(Math.random()-0.5)*3.5, r:rad, num:i}); } ballsRef.current=arr; }
+      let last=performance.now();
+      const loop=(t)=>{
+        const dt=Math.min((t-last)/1000,0.033); last=t;
+        ballsRef.current.forEach(b=>{ b.x+=b.vx*dt*60; b.y+=b.vy*dt*60; const dx=b.x-cx, dy=b.y-cy, dist=Math.hypot(dx,dy); if(dist>outerR-b.r){ const nx=dx/dist, ny=dy/dist; b.x=cx+nx*(outerR-b.r); b.y=cy+ny*(outerR-b.r); const dot=b.vx*nx+b.vy*ny; b.vx-=2*dot*nx*0.93; b.vy-=2*dot*ny*0.93; } });
+        ctx.clearRect(0,0,S,S);
+        const glow=ctx.createRadialGradient(cx,cy,outerR*0.2,cx,cy,outerR*1.3);
+        if(drumPhase==="main"){ glow.addColorStop(0,"rgba(123,77,255,0.22)"); glow.addColorStop(0.6,"rgba(15,15,30,0.96)"); glow.addColorStop(1,"rgba(0,0,0,1)"); } else { glow.addColorStop(0,"rgba(255,60,60,0.35)"); glow.addColorStop(0.5,"rgba(80,10,10,0.98)"); glow.addColorStop(1,"rgba(0,0,0,1)"); }
+        ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(cx,cy,outerR+18,0,Math.PI*2); ctx.fill();
+        const rimGrad=ctx.createLinearGradient(cx-outerR,cx+outerR,cy,cy); rimGrad.addColorStop(0,"#2a2a3a"); rimGrad.addColorStop(0.22,"#9a9aaa"); rimGrad.addColorStop(0.5,"#e8e8f2"); rimGrad.addColorStop(0.78,"#9a9aaa"); rimGrad.addColorStop(1,"#2a2a3a"); ctx.strokeStyle=rimGrad; ctx.lineWidth=12; ctx.beginPath(); ctx.arc(cx,cy,outerR+6,0,Math.PI*2); ctx.stroke();
+        ballsRef.current.forEach(b=>{ ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); const g=ctx.createRadialGradient(b.x-3.5,b.y-3.5,1.4,b.x,b.y,b.r); g.addColorStop(0,"#fff"); g.addColorStop(0.18,"#fff8e8"); g.addColorStop(0.45,b.num%2?"#9d7cff":"#6ea8ff"); g.addColorStop(1,b.num%2?"#5a2fbf":"#1e3a8a"); ctx.fillStyle=g; ctx.fill(); ctx.fillStyle="#0f0f12"; ctx.font=`bold ${b.r*0.78}px Inter`; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(String(b.num),b.x,b.y+0.6); });
+        rafRef.current=requestAnimationFrame(loop);
+      };
+      rafRef.current=requestAnimationFrame(loop);
+    };
+    const t=setTimeout(init,120);
+    return ()=>{ clearTimeout(t); cancelAnimationFrame(rafRef.current); rollingTimersRef.current.forEach(t=>clearTimeout(t)); };
+  },[view,drumPhase]);
+
+  function prizeFor(mm,pb){
+    if(mm===7 && pb) return {prize:drawJackpot||jackpot, division:1};
+    if(mm===7) return {prize:50000, division:2};
+    if(mm===6 && pb) return {prize:4500, division:3};
+    if(mm===6) return {prize:600, division:4};
+    if(mm===5 && pb) return {prize:160, division:5};
+    if(mm===4 && pb) return {prize:70, division:6};
+    if(mm===5) return {prize:35, division:7};
+    if(mm===3 && pb) return {prize:20, division:8};
+    if(mm===2 && pb) return {prize:10, division:9};
+    return {prize:0, division:0};
+  }
+
+  const handleNumberClick = (gameIdx, n)=>{
+    play("tap");
+    const need = mode==="Pick"? (pickType==="Pick6"?6:5) : mode.includes("System")? sysSize : 7;
+    setGames(prev=>{
+      const copy = prev.map(g=>({main:[...g.main], pb:g.pb}));
+      const cur = copy[gameIdx];
+      if(!cur) return prev;
+      if(cur.main.includes(n)){ cur.main = cur.main.filter(x=>x!==n); }
+      else { if(cur.main.length>=need) return prev; cur.main = [...cur.main, n].sort((a,b)=>a-b); }
+      return copy;
+    });
+  };
+  const handlePBClick = (gameIdx, n)=>{
+    play("tap");
+    setGames(prev=>{
+      const copy = prev.map(g=>({main:[...g.main], pb:g.pb}));
+      copy[gameIdx].pb = copy[gameIdx].pb===n?null:n;
+      return copy;
+    });
+  };
+  const handleFast = ()=>{
+    play("button");
+    const need = mode==="Pick"? (pickType==="Pick6"?6:5) : mode.includes("System")? sysSize : 7;
+    setGames(prev=> prev.map(g=>{
+      let main=[...g.main];
+      if(main.length<need){ const add=randPicks(need-main.length,1,35,main); main=[...main,...add].sort((a,b)=>a-b); }
+      let pb=g.pb;
+      if(mode!=="PowerHit" && mode!=="PowerHitSystem"){ if(pb==null) pb=randInt(1,20); } else pb=null;
+      return {main: main.slice(0,need), pb};
+    }));
+    const all={}; const cnt=mode==="Standard"?gameCount:1; for(let i=0;i<cnt;i++) all[i]=true;
+    setExpanded(all); setExpandAll(true);
+  };
+  const handleClear = ()=>{ play("tap"); setGames(prev=> prev.map(()=>({main:[],pb:null}))); };
+
+  useEffect(()=>{
+    if(mode==="Standard"){
+      setGames(prev=>{
+        const cur=[...prev];
+        if(cur.length < gameCount){ for(let i=cur.length;i<gameCount;i++) cur.push({main:[],pb:null}); }
+        else if(cur.length > gameCount){ cur.length=gameCount; }
+        return cur;
+      });
+      const ne={}; for(let i=0;i<gameCount;i++) ne[i]=false;
+      setExpanded(ne); setExpandAll(false);
+    } else {
+      setGames([{main:[],pb:null}]);
+      setExpanded({0:true}); setExpandAll(true);
+    }
+  },[gameCount,mode]);
+
+  useEffect(()=>{
+    setGames(prev=> prev.map(x=>{
+      let need=7;
+      if(mode==="System"||mode==="PowerHitSystem") need=sysSize;
+      else if(mode==="Pick") need=pickType==="Pick6"?6:5;
+      if(x.main.length>need) return {...x, main:x.main.slice(0,need)};
+      return x;
+    }));
+  },[sysSize,mode,pickType]);
+
+  function toggleGame(i){ play("tap"); setExpanded(prev=>({...prev, [i]:!prev[i]})); }
+  function toggleAll(){
+    play("button");
+    const shouldExpand=!expandAll;
+    const ne={}; const count=mode==="Standard"?gameCount:1; for(let i=0;i<count;i++) ne[i]=shouldExpand;
+    setExpanded(ne); setExpandAll(shouldExpand);
+  }
+  function toggleDrawGame(i){ play("tap"); setDrawExpanded(prev=>({...prev, [i]:!prev[i]})); }
+  function toggleDrawAll(){
+    play("button");
+    const should=!drawExpandAll;
+    const ne={}; games.forEach((_,i)=> ne[i]=should);
+    setDrawExpanded(ne); setDrawExpandAll(should);
+  }
+
+  function doDraw(){
+    ensureAudio();
+    const wMain=randPicks(7,1,35); const wPB=randInt(1,20);
+    setDrawJackpot(jackpot);
+    setWinning({main:wMain, pb:wPB});
+    setReveal(0); setDrumPhase("main"); ballsRef.current=[];
+    const ne={}; games.forEach((_,i)=> ne[i]=true); setDrawExpanded(ne); setDrawExpandAll(true);
+    play("rollingNotes");
+    let total=0; let divWinsThisDraw={1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0}; let divPrizeThisDraw={1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0};
+    const genGames = ()=>{
+      const out=[];
+      const first=games[0]||{main:[],pb:null};
+      if(mode==="Standard"){ games.forEach(g=> out.push(g)); }
+      else if(mode==="System"){ const nums=first.main; const pb=first.pb; const rec=(s,cur)=>{ if(cur.length===7){ out.push({main:[...cur], pb}); return;} for(let i=s;i<nums.length;i++){cur.push(nums[i]); rec(i+1,cur); cur.pop();}}; rec(0,[]); }
+      else if(mode==="PowerHit"){ for(let pb=1; pb<=20; pb++) out.push({main:first.main, pb}); }
+      else if(mode==="PowerHitSystem"){ const nums=first.main; const rec=(s,cur)=>{ if(cur.length===7){ for(let pb=1; pb<=20; pb++) out.push({main:[...cur], pb}); return;} for(let i=s;i<nums.length;i++){cur.push(nums[i]); rec(i+1,cur); cur.pop();}}; rec(0,[]); }
+      else if(mode==="Pick"){
+        const all=Array.from({length:35},(_,i)=>i+1);
+        if(pickType==="Pick6"){ const chosen=first.main.slice(0,6); const rem=all.filter(n=>!chosen.includes(n)); rem.forEach(r=> out.push({main:[...chosen,r].sort((a,b)=>a-b), pb:first.pb})); }
+        else { const chosen=first.main.slice(0,5); const rem=all.filter(n=>!chosen.includes(n)); for(let i=0;i<rem.length;i++) for(let j=i+1;j<rem.length;j++) out.push({main:[...chosen,rem[i],rem[j]].sort((a,b)=>a-b), pb:first.pb}); }
+      }
+      return out;
+    };
+    const allGames=genGames();
+    allGames.forEach(g=>{ const mm=g.main.filter(x=>wMain.includes(x)).length; const pbm=g.pb===wPB; const {prize,division}=prizeFor(mm,pbm); if(division>0){ divWinsThisDraw[division]++; divPrizeThisDraw[division]+=prize; total+=prize; } });
+
+    // Update pro stats
+    setTotalDraws(d=>d+1);
+    setTotalGamesPlayed(t=>t+equivGames);
+    setDivCounts(prev=>{ const n={...prev}; Object.keys(divWinsThisDraw).forEach(k=> n[k]+=divWinsThisDraw[k]); return n; });
+    setDivPrizeTotals(prev=>{ const n={...prev}; Object.keys(divPrizeThisDraw).forEach(k=> n[k]+=divPrizeThisDraw[k]); return n; });
+    setNumberPickFreq(prev=>{ const n=[...prev]; games.forEach(g=> g.main.forEach(num=>{ if(num>=1&&num<=35) n[num-1]++; })); return n; });
+    setPbPickFreq(prev=>{ const n=[...prev]; games.forEach(g=>{ if(g.pb&&g.pb>=1&&g.pb<=20) n[g.pb-1]++; }); return n; });
+    setWinningFreq(prev=>{ const n=[...prev]; wMain.forEach(num=> n[num-1]++); return n; });
+    setPbWinningFreq(prev=>{ const n=[...prev]; n[wPB-1]++; return n; });
+    setBiggestWin(b=> Math.max(b,total));
+    if(total===0){ setLosingStreak(s=>{ const ns=s+1; setMaxLosingStreak(m=> Math.max(m,ns)); return ns; }); } else { setLosingStreak(0); }
+
+    setResults({winAmount:total, divWins:divWinsThisDraw, divPrizes:divPrizeThisDraw});
+    setSpent(s=>s+totalCost); setWon(s=>s+total); setView("draw");
+    for(let i=0;i<7;i++){
+      setTimeout(()=>{
+        setReveal(r=>r+1);
+        const drawn=wMain[i];
+        const firstMain=games[0]?.main||[];
+        play("ballReveal", {index:i});
+        setTimeout(()=>{
+          if(firstMain.includes(drawn)){ play("ballMatch"); setShake(true); setTimeout(()=>setShake(false),400); }
+          else play("ballMiss");
+        },350);
+      }, 1000+i*1100);
+    }
+    setTimeout(()=>{ ballsRef.current=[]; setDrumPhase("powerful"); play("button"); play("rollingNotes"); },8300);
+    setTimeout(()=>{
+      setReveal(8);
+      play("powerful ballReveal");
+      setTimeout(()=>{ play("ballMatch"); setShake(true); setTimeout(()=>setShake(false),600);
+        setTimeout(()=>{ if(total>0) play("win"); else play("lose"); if(divWinsThisDraw[1]>0){ setJackpot(randInt(4000000,10000000)); } else { setJackpot(j=>j+500000+randInt(0,500000)); } },600);
+      },700);
+    },9600);
+  }
+
+  const yourFirst=games[0]||{main:[],pb:null};
+  const thisNet=(results?.winAmount||0)-totalCost;
+  const absNet=Math.abs(thisNet);
+
+  function getSingleItemForAmount(amount){
+    const items=[
+      {price:0.15, name:"red frog", emoji:"🐸", desc:"corner shop 15c"},
+      {price:0.60, name:"Freddo Frog", emoji:"🐸", desc:"school canteen 60c"},
+      {price:3.50, name:"Bunnings snag with onion", emoji:"🌭", desc:"sausage sizzle"},
+      {price:6, name:"flat white", emoji:"☕", desc:"cafe"},
+      {price:12, name:"meat pie + iced coffee", emoji:"🥧", desc:"servo lunch"},
+      {price:22, name:"Krispy Kreme dozen", emoji:"🍩", desc:"12 glazed"},
+      {price:25, name:"family pizza + garlic bread", emoji:"🍕", desc:"large combo"},
+      {price:35, name:"pub schnitty + schooner", emoji:"🍺", desc:"RSL special"},
+      {price:50, name:"carton of beer", emoji:"🍻", desc:"24 pack"},
+      {price:80, name:"1hr Sydney CBD parking", emoji:"🅿️", desc:"CBD parking"},
+      {price:120, name:"Uber to the airport", emoji:"🚕", desc:"airport ride"},
+      {price:250, name:"weekly groceries", emoji:"🛒", desc:"Woolies shop"},
+      {price:450, name:"weekend away Blue Mountains", emoji:"🏔️", desc:"2 nights"},
+      {price:700, name:"week of Sydney rent", emoji:"🏠", desc:"average 1-bed"},
+      {price:1500, name:"return flights to Bali", emoji:"✈️", desc:"Jetstar sale"},
+      {price:3000, name:"second-hand dirt bike", emoji:"🏍️", desc:"Marketplace"},
+      {price:12000, name:"used Corolla", emoji:"🚗", desc:"200k kms"},
+      {price:25000, name:"used Hilux", emoji:"🛻", desc:"300k kms"},
+      {price:60000, name:"brand new Hilux", emoji:"🛻", desc:"off the lot"},
+      {price:100000, name:"house deposit in Dubbo", emoji:"🏡", desc:"5% deposit"},
+      {price:250000, name:"apartment deposit", emoji:"🏢", desc:"Sydney fringe"},
+    ];
+    let best=null; let bestDiff=Infinity;
+    for(let it of items){
+      const diff=Math.abs(amount - it.price);
+      if(it.price <= amount*1.5 && it.price >= amount*0.3){
+        if(diff < bestDiff){ bestDiff=diff; best={...it, count:1, total:it.price}; }
+      }
+    }
+    if(best) return best;
+    for(let it of items){
+      const count=Math.round(amount / it.price);
+      if(count>=2 && count<=5){
+        const total=count*it.price;
+        const diff=Math.abs(amount - total);
+        if(diff < bestDiff){ bestDiff=diff; best={...it, count, total}; }
+      }
+    }
+    if(best) return best;
+    if(amount < 5){
+      const it=items[0];
+      const count=Math.round(amount / it.price);
+      return {...it, count: Math.max(1,count), total: Math.max(1,count)*it.price};
+    }
+    const hilux=items.find(i=>i.price===25000);
+    const count=Math.floor(amount / hilux.price) || 1;
+    return {...hilux, count, total:count*hilux.price};
+  }
+
+  const haulItem = getSingleItemForAmount(absNet);
+
+  function isTicketFull(g){
+    const need = mode==="Pick"? (pickType==="Pick6"?6:5) : mode.includes("System")? sysSize : 7;
+    const mainFull = g.main.length === need;
+    if(mode==="PowerHit" || mode==="PowerHitSystem") return mainFull;
+    return mainFull && g.pb != null;
+  }
+
+  const roi = spent>0 ? ((won-spent)/spent*100) : 0;
+  const hitRate = totalGamesPlayed>0 ? (Object.values(divCounts).reduce((a,b)=>a+b,0)/totalGamesPlayed*100) : 0;
+  const totalDivWins = Object.values(divCounts).reduce((a,b)=>a+b,0);
+  const bankCurrent = (bankStart+borrow)-spent+won;
+
+  // hot/cold numbers
+  const hotNumbers = numberPickFreq.map((c,i)=>({num:i+1,count:c})).sort((a,b)=>b.count-a.count).slice(0,5);
+  const coldNumbers = numberPickFreq.map((c,i)=>({num:i+1,count:c})).filter(x=>x.count>0).sort((a,b)=>a.count-b.count).slice(0,5);
+  const hotWinning = winningFreq.map((c,i)=>({num:i+1,count:c})).sort((a,b)=>b.count-a.count).slice(0,5);
+
+  return (
+    <div className="min-h-screen w-full bg-[#f5f5f7] text-[#111] overflow-x-hidden">
+      <div className="fixed top-3 right-3 z-[60] flex items-center gap-2">
+        <button type="button" onClick={()=>{play("button"); setView("title");}} className="bg-white border border-[#e9d5ff] shadow rounded-full px-4 py-2 flex items-center gap-2 text-[13px] font-bold tracking-wide">BANK ${fmtMoney(bankCurrent)}</button>
+      </div>
+
+      {view==="title" && (
+        <div className="min-h-screen bg-[#07070e] text-white flex flex-col items-center justify-center relative overflow-hidden px-4 py-8">
+          <canvas ref={titleCanvasRef} className="absolute inset-0 w-full h-full opacity-70" style={{filter:"blur(10px)"}} />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-[#07070e]/50 to-[#07070e]/90" />
+          <div className="relative z-10 w-full max-w-[520px] border-[3px] border-[#fbbf24]/30 rounded-[28px] p-2 bg-[#0f0f14]/80 backdrop-blur-xl">
+            <div className="flex justify-between px-2 py-2 gap-1">{Array.from({length:18}).map((_,i)=><div key={i} className="marquee-bulb" />)}</div>
+            <div className="bg-[#0a0a13] rounded-[20px] px-6 py-8 md:p-10 text-center border border-white/10">
+              <div className="bebas text-[64px] md:text-[84px] leading-[0.9] tracking-tight bg-gradient-to-b from-white via-[#fde68a] to-[#f59e0b] bg-clip-text text-transparent">POWERFUL<br/>BALL</div>
+              <div className="mt-6 inline-flex flex-col items-center bg-[#111] border-2 border-[#fbbf24] rounded-full px-8 py-4">
+                <div className="text-[#fbbf24] text-[11px] font-bold tracking-[0.2em] uppercase">Current Jackpot</div>
+                <div className="text-white text-[32px] md:text-[40px] font-extrabold tracking-tight">${fmtInt(jackpot)}</div>
+                <div className="righteous text-[#fbbf24] text-[20px] tracking-widest -mt-1">JACKPOT</div>
+              </div>
+              <button type="button" onTouchStart={ensureAudio} onClick={()=>{play("fancyStart"); setView("bank");}} className="mt-8 w-full max-w-[320px] bg-[#fbbf24] text-black rounded-full py-[18px] font-extrabold text-[20px] tracking-wide">PLAY NOW →</button>
+            </div>
+            <div className="flex justify-between px-2 py-2 gap-1 mt-1">{Array.from({length:18}).map((_,i)=><div key={i} className="marquee-bulb" />)}</div>
+          </div>
+        </div>
+      )}
+
+      {view==="bank" && (
+        <div className="min-h-screen bg-[#0a0a13] text-white flex flex-col">
+          <div className="h-[56px] bg-[#0f0f14] border-b border-white/10 flex items-center px-4"><div className="text-[12px] font-bold tracking-[0.22em] text-white/40">POWERFUL BALL</div></div>
+          <div className="flex-1 px-4 py-6 max-w-[480px] mx-auto w-full">
+            <h1 className="text-[30px] font-extrabold leading-[1.05]">Welcome to the<br/><span className="text-[#fbbf24]">Powerful Ball Bank</span></h1>
+            <div className="mt-6 bg-white/5 border border-white/10 rounded-[16px] p-4">
+              <div className="text-[11px] font-bold tracking-widest text-white/50 uppercase">Starting Cash</div>
+              <div className="text-[34px] font-extrabold text-[#fbbf24] mt-1">${fmtMoney(bankStart)}</div>
+              <input type="range" min={100} max={1000000} step={100} value={bankStart} onChange={e=>{setBankStart(Number(e.target.value)); play("tap");}} className="w-full mt-3 h-2 rounded-full accent-[#fbbf24]" />
+            </div>
+            <button type="button" onClick={()=>{play("button"); setView("choose");}} className="mt-6 w-full bg-[#7b4dff] text-white rounded-full py-[14px] font-extrabold text-[15px]">CONTINUE →</button>
+          </div>
+        </div>
+      )}
+
+      {view==="choose" && (
+        <div className="min-h-screen bg-[#f5f5f7] flex flex-col pb-[90px]">
+          <div className="bg-white border-b border-gray-200 sticky top-0 z-30"><div className="h-[56px] flex items-center px-4 max-w-[560px] mx-auto w-full justify-between"><div className="text-[12px] font-bold tracking-[0.22em] text-[#9aa0aa]">POWERFUL BALL</div></div></div>
+          <div className="bg-[#2f4ea6] px-4 py-3"><div className="max-w-[560px] mx-auto"><div className="flex flex-wrap gap-2">{["Standard","System","PowerHit","PowerHitSystem","Pick"].map(a=>{ const label=a==="PowerHitSystem"?"PH System":a; return <button key={a} type="button" onClick={()=>{play("tap"); setMode(a);}} className={`px-4 py-[7px] rounded-full text-[12px] font-bold ${mode===a?"bg-white text-[#2f4ea6] shadow":"bg-[#25408f] text-white/80"}`}>{label}</button>})}</div></div></div>
+
+          <div className="flex-1 px-4 py-5 max-w-[560px] mx-auto w-full space-y-5">
+            <div className="flex gap-2 flex-wrap">{mode==="Standard" && [1,2,4,6,8,12,18,50].map(n=> <button key={n} type="button" onClick={()=>{play("tap"); setGameCount(n);}} className={`px-4 py-2 rounded-full text-[13px] font-bold border ${gameCount===n?"bg-[#2f4ea6] text-white border-[#2f4ea6]":"bg-white text-[#2f4ea6] border-[#e5e7eb]"}`}>{n} games</button>)}</div>
+            {(mode==="System"||mode==="PowerHitSystem") && <div className="flex gap-2 flex-wrap">{Array.from({length: mode==="System"?13:8},(_,i)=>{const sz=8+i; return <button key={sz} type="button" onClick={()=>{play("tap"); setSysSize(sz);}} className={`px-3 py-2 rounded-full text-[12px] font-bold border ${sysSize===sz?"bg-[#2f4ea6] text-white border-[#2f4ea6]":"bg-white"}`}>Sys {sz} • {combos(sz,7)}</button>})}</div>}
+            {mode==="Pick" && <div className="flex gap-2"><button type="button" onClick={()=>{play("tap"); setPickType("Pick6");}} className={`px-4 py-2 rounded-full text-[12px] font-bold border ${pickType==="Pick6"?"bg-[#2f4ea6] text-white":"bg-white"}`}>Pick6 • 29</button><button type="button" onClick={()=>{play("tap"); setPickType("Pick5");}} className={`px-4 py-2 rounded-full text-[12px] font-bold border ${pickType==="Pick5"?"bg-[#2f4ea6] text-white":"bg-white"}`}>Pick5 • 435</button></div>}
+
+            <div className="flex gap-2">
+              <button type="button" onClick={handleFast} className="flex-1 bg-[#7b4dff] text-white rounded-full py-[11px] px-4 text-[13px] font-bold shadow">⚡ Fast select</button>
+              <button type="button" onClick={handleClear} className="flex-1 bg-[#8a8a8a] text-white rounded-full py-[11px] px-4 text-[13px] font-bold">🗑 Clear</button>
+              {mode==="Standard" && <button type="button" onClick={toggleAll} className="flex-1 bg-white border rounded-full py-[11px] px-4 text-[13px] font-bold">{expandAll?"Collapse all ▲":"Expand all ▼"}</button>}
+            </div>
+
+            {(mode==="Standard"? games : [games[0]]).map((g,idx)=>{
+              const full=isTicketFull(g);
+              return (
+              <div key={idx} className={`rounded-[16px] border-2 overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.08)] ${full?"bg-gradient-to-br from-white to-[#f0f0ff] border-[#2f4ea6]/30":"bg-white border-[#d1d5db]"}`}>
+                <button type="button" onClick={()=>toggleGame(idx)} className={`w-full px-4 py-3 flex justify-between items-center text-left relative overflow-hidden ${full?"bg-gradient-to-r from-[#2f4ea6] to-[#5b4dff] text-white":"bg-gradient-to-r from-[#9ca3af] to-[#6b7280] text-white"}`}>
+                  {full && <div className="absolute inset-0 ticket-shine opacity-30"></div>}
+                  <div className="relative flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-[13px] ${full?"bg-[#fbbf24] text-black":"bg-white/90 text-[#6b7280]"}`}>{idx+1}</div>
+                    <div><div className="text-[11px] font-bold tracking-widest opacity-80 uppercase">Ticket {idx+1}</div><div className="text-[12px] font-bold">{full?`Ready • ${g.main.length}/7 ${g.pb?`• PB ${g.pb}`:""}`:g.main.length>0?`${g.main.length}/7 picking...`:"Empty - tap to fill"}</div></div>
+                  </div>
+                  <div className="relative flex items-center gap-2"><span className={`text-[10px] rounded-full px-2 py-1 font-bold ${full?"bg-[#fbbf24] text-black":"bg-white/20 text-white"}`}>{g.main.length}/7</span><span className="text-[12px]">{expanded[idx]?"▼":"▶"}</span></div>
+                </button>
+                {expanded[idx] && (
+                  <div>
+                    <div className="px-4 py-3 flex flex-wrap gap-2 bg-[#f9f8ff] border-b border-[#e9e5ff]">
+                      {Array.from({length: (mode==="Pick"? (pickType==="Pick6"?6:5) : mode.includes("System")? sysSize : 7)}).map((_,i)=>{const val=g.main[i];return <div key={i} className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-[13px] font-bold shadow-sm ${val!==undefined?"border-[#2f4ea6] bg-[#2f4ea6] text-white":"border-[#d1d5db] bg-white text-transparent"}`}>{val??"•"}</div>})}
+                      {(mode==="Standard"||mode==="System"||mode==="Pick") && <><div className="w-px h-9 bg-[#e9e5ff] mx-1 self-center"/><div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-[13px] font-bold shadow-sm ${g.pb?"border-[#e11d48] bg-[#e11d48] text-white":"border-[#d1d5db] bg-white"}`}>{g.pb??"•"}</div></>}
+                    </div>
+                    <div className="grid grid-cols-7 border-t border-[#e9e5ff]">
+                      {Array.from({length:35}).map((_,i)=>{
+                        const n=i+1;
+                        const sel=g.main.includes(n);
+                        return <button key={n} type="button" onClick={()=>handleNumberClick(idx,n)} className={`h-[46px] border-r border-b border-[#eef0f3] flex items-center justify-center text-[15px] font-bold transition-all ${sel?"bg-[#2f4ea6] text-white scale-95 shadow-inner":"bg-white text-[#5a2daf] hover:bg-[#f5f3ff]"}`}>{n}</button>
+                      })}
+                    </div>
+                    {(mode==="Standard"||mode==="System"||mode==="Pick") && <>
+                      <div className="bg-gradient-to-r from-[#6b7a8a] to-[#4a5568] text-white text-[11px] font-bold tracking-widest py-[8px] text-center">POWERFUL BALL 1-20</div>
+                      <div className="grid grid-cols-10">{Array.from({length:20}).map((_,i)=>{const n=i+1;const sel=g.pb===n;return <button key={n} type="button" onClick={()=>handlePBClick(idx,n)} className={`h-[46px] border-r border-b flex items-center justify-center text-[15px] font-bold transition-all ${sel?"bg-[#e11d48] text-white scale-95":"bg-white text-[#5a2daf] hover:bg-[#fff1f2]"}`}>{n}</button>})}</div>
+                    </>}
+                  </div>
+                )}
+              </div>
+              );
+            })}
+
+            <div className="bg-white border-2 border-[#e9e5ff] rounded-[12px] p-4 shadow-sm"><div className="flex justify-between text-[13px]"><span className="text-gray-500">Total ({equivGames} games)</span><span className="font-bold">${fmtMoney(totalCost)}</span></div></div>
+          </div>
+
+          <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t p-3 z-30">
+            <div className="max-w-[560px] mx-auto flex gap-2">
+              <button type="button" onClick={()=>{play("button"); if(games[0].main.length===0){ alert("Pick numbers first! Expand a ticket."); return; } setView("confirm"); }} className="flex-1 bg-[#7b4dff] text-white rounded-full py-[13px] font-extrabold text-[14px] shadow-lg">LOCK → $${fmtMoney(totalCost)}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view==="confirm" && (
+        <div className="min-h-screen bg-[#f5f5f7] px-4 py-6">
+          <div className="max-w-[560px] mx-auto">
+            <h2 className="text-[20px] font-extrabold">Confirm • {mode} • {equivGames} games • ${fmtMoney(totalCost)}</h2>
+            <button type="button" onTouchStart={ensureAudio} onClick={()=>{play("button"); doDraw();}} className="mt-6 w-full bg-[#7b4dff] text-white rounded-full py-[13px] font-extrabold shadow">CONFIRM & START DRUM →</button>
+          </div>
+        </div>
+      )}
+
+      {view==="draw" && (
+        <div className="min-h-screen bg-[#07070e] text-white flex flex-col">
+          <div className="h-[56px] flex items-center justify-between px-4 border-b border-white/10"><div className="text-[12px] font-bold tracking-[0.22em] text-white/40">POWERFUL BALL</div><div className="text-[11px] text-white/50">{reveal}/8</div></div>
+          <div className="flex-1 max-w-[560px] mx-auto w-full px-4 py-5 flex flex-col items-center space-y-4">
+            <div className={`w-full relative ${shake?"shake":""}`}>
+              <div className={`w-full border-2 rounded-[24px] p-3 flex flex-col items-center justify-center ${drumPhase==="main"?"bg-[radial-gradient(ellipse_at_center,_rgba(123,77,255,0.22),_transparent_70%)] border-[#fbbf24]/40":"bg-[radial-gradient(ellipse_at_center,_rgba(255,40,40,0.35),_transparent_70%)] border-red-500/60"}`}>
+                <canvas ref={canvasRef} className="rounded-[18px] bg-[#0c0c18]" />
+              </div>
+              <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 z-20"><div className={`bg-white text-black text-[12px] font-extrabold rounded-full px-4 py-2 shadow border-2 border-[#fbbf24] whitespace-nowrap ${reveal>0?"pop":""}`}>{reveal===0?"Rolling...":reveal<7?`Ball ${reveal} drawn!`:reveal===7?"and the powerful ball is...":`Powerful Ball drawn! - DRAW COMPLETE!`}</div></div>
+            </div>
+
+            {winning && (
+              <div className="w-full mt-14 space-y-4">
+                <div className="bg-white text-black rounded-[14px] p-4 shadow">
+                  <div className="text-[11px] font-bold uppercase text-gray-500">Winning numbers</div>
+                  <div className="flex flex-wrap gap-2 mt-3 items-center">
+                    {winning.main.map((n,i)=>{ const shown=i<reveal; const hit=yourFirst.main.includes(n) && shown; return <div key={i} className={`w-10 h-10 rounded-full flex items-center justify-center font-extrabold text-[13px] border ${!shown?"bg-gray-200 text-gray-200 opacity-40":hit?"bg-[#dcfce7] border-[#4ade80] text-[#14532d] pop":"bg-[#2f4ea6] text-white"}`}>{shown?n:"•"}</div> })}
+                    <div className="w-px h-10 bg-gray-200 mx-1" />
+                    <div className={`w-[52px] h-[52px] rounded-full flex items-center justify-center font-extrabold text-[18px] border-2 ${reveal<8?"bg-gray-200 opacity-40":"bg-gradient-to-br from-[#ff8a8a] via-[#e00000] to-[#7a0000] text-white pop"}`}>{reveal>=8?winning.pb:"•"}</div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-[#1a1a2e] to-[#0f0f1e] border-2 border-[#fbbf24]/30 rounded-[16px] p-4">
+                  <div className="flex justify-between items-center">
+                    <div className="text-[11px] font-bold tracking-widest text-[#fbbf24] uppercase">Your tickets</div>
+                    <button type="button" onClick={toggleDrawAll} className="text-[11px] bg-[#fbbf24] text-black rounded-full px-3 py-1 font-bold">{drawExpandAll?"Collapse all ▲":"Expand all ▼"} ({games.length})</button>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {games.map((g,idx)=>{
+                      const revealedMain = winning.main.slice(0, Math.min(reveal,7));
+                      const pbRevealed = reveal>=8;
+                      const matchCount = g.main.filter(n=> revealedMain.includes(n)).length;
+                      const pbMatch = pbRevealed && g.pb===winning.pb;
+                      const isExpanded = drawExpanded[idx] ?? true;
+                      return (
+                        <div key={idx} className="bg-gradient-to-br from-white to-[#fff8e1] rounded-[12px] overflow-hidden border border-[#fbbf24]/40 shadow">
+                          <button type="button" onClick={()=>toggleDrawGame(idx)} className="w-full px-3 py-2 flex justify-between items-center text-left bg-gradient-to-r from-[#2f4ea6] to-[#7b4dff] text-white">
+                            <div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-[#fbbf24] text-black flex items-center justify-center font-bold text-[11px]">{idx+1}</div><span className="text-[11px] font-bold">TICKET {idx+1}</span><span className={`text-[10px] rounded-full px-2 py-0.5 font-bold ${matchCount>0?"bg-[#fbbf24] text-black":"bg-white/20 text-white"}`}>{matchCount}/7 {pbMatch?"• PB ✓":""}</span></div>
+                            <span className="text-[10px]">{isExpanded?"▼":"▶"}</span>
+                          </button>
+                          {isExpanded && (
+                            <div className="px-3 pb-3 flex flex-wrap gap-1.5 pt-2">
+                              {g.main.map(num=>{
+                                const hit = revealedMain.includes(num);
+                                const isNewHit = hit && revealedMain[revealedMain.length-1]===num;
+                                return <div key={num} className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold border-2 ${hit?"bg-[#dcfce7] border-[#4ade80] text-[#14532d] shadow":"bg-white border-[#e5e7eb] text-gray-500"} ${isNewHit?"pop":""}`}>{num}</div>
+                              })}
+                              <div className="w-px h-8 bg-[#fbbf24]/30 mx-1 self-center"/>
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold border-2 ${pbMatch?"bg-[#dcfce7] border-[#4ade80] text-[#14532d] pop":pbRevealed?"bg-red-100 border-red-300 text-gray-400":"bg-white border-[#e5e7eb] text-gray-300"}`}>{g.pb??"•"}</div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* inline SEE RESULTS removed - using fixed bar only */}
+                {reveal>=8 && (
+                  <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#07070e]/95 backdrop-blur border-t border-[#fbbf24]/30 p-3">
+                    <div className="max-w-[560px] mx-auto flex gap-2">
+                      <button type="button" onClick={()=>{play("button"); setView("result");}} className="flex-1 bg-[#fbbf24] text-black rounded-full py-[14px] font-extrabold text-[15px] shadow-[0_0_20px_rgba(251,191,36,0.4)]">CONTINUE → SEE RESULTS</button>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {view==="result" && (
+        <div className="min-h-screen bg-[#07070e] px-4 py-6 relative overflow-hidden">
+          <canvas ref={finalCanvasRef} className="absolute inset-0 w-full h-full opacity-40" style={{filter:"blur(14px)"}} />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#07070e]/70 via-[#07070e]/80 to-[#07070e]" />
+          <div className="relative z-10 max-w-[560px] mx-auto space-y-4">
+            <div className={`rounded-[20px] p-6 text-center border-2 ${thisNet>=0?"bg-[#14532d] border-[#166534]":"bg-[#7f1d1d] border-[#991b1b]"}`}>
+              <div className="text-[10px] font-black tracking-[0.25em] uppercase text-white/70">THIS ROUND • {mode}</div>
+              <div className="mt-2 bebas text-[60px] leading-[0.85] text-white" style={{WebkitTextStroke:"1px black"}}>{thisNet>=0?`+ $${fmtMoney(thisNet)}`:`- $${fmtMoney(Math.abs(thisNet))}`}</div>
+              <div className="righteous text-[20px] mt-1 uppercase text-white/90">{thisNet>=0?"PROFIT!" : "LOSS"}</div>
+              <div className="mt-3 inline-flex bg-black/30 rounded-full px-4 py-1.5 text-[11px] font-bold text-white">Spent $${fmtMoney(totalCost)} • Won $${fmtMoney((results?.winAmount||0))} • {equivGames} games</div>
+            </div>
+
+            <div className="bg-white rounded-[20px] border p-5 shadow">
+              <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase">{thisNet>=0 ? "PROFIT COULD BUY..." : "YOU LOST ENOUGH TO BUY..."}</div>
+              <div className="mt-4">
+                {(()=>{
+                  if(!haulItem) return null;
+                  return <div className="bg-gradient-to-br from-[#111] to-[#222] rounded-[18px] p-5 text-white border border-[#333]">
+                    <div className="text-[11px] tracking-[0.2em] opacity-60 uppercase">{haulItem.count>1?`${haulItem.count} × ${haulItem.name}`:haulItem.name} • ${fmtMoney(haulItem.price)} ea</div>
+                    <div className="mt-3 flex items-start gap-3">
+                      <div className="text-[36px]">{haulItem.emoji}</div>
+                      <div>
+                        <div className="text-[22px] font-extrabold leading-[1.1]">{haulItem.count>1?`${haulItem.count} × `:''}{haulItem.name}</div>
+                        <div className="mt-1 text-[13px] opacity-80">{haulItem.desc}</div>
+                        <div className="mt-3 inline-flex bg-white/10 rounded-full px-3 py-1 text-[11px] font-bold">${fmtMoney(absNet)} ≈ {haulItem.count>1?`${haulItem.count} × `:''}${haulItem.price}</div>
+                      </div>
+                    </div>
+                  </div>;
+                })()}
+              </div>
+            </div>
+
+            <button type="button" onClick={()=>{play("tap"); setShowStats(s=>!s);}} className="w-full bg-white border rounded-full py-3 font-bold text-[13px]">{showStats?"Hide Pro Statistics ▲":"Show Pro Statistics ▼"}</button>
+            {showStats && (
+              <div className="bg-[#101018] border border-white/10 rounded-[20px] p-5 text-white space-y-5">
+                <div className="flex justify-between items-center"><div className="text-[12px] font-bold tracking-[0.2em] text-[#fbbf24] uppercase">Pro Statistics</div><div className="text-[10px] bg-white/10 rounded-full px-2 py-1">{fmtInt(totalDraws)} draws • {fmtInt(totalGamesPlayed)} games</div></div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Bankroll</div><div className={`text-[18px] font-extrabold mt-1 ${bankCurrent>=bankStart?"text-[#4ade80]":"text-[#f87171]"}`}>${fmtMoney(bankCurrent)}</div><div className="text-[10px] opacity-60 mt-1">Start ${fmtMoney(bankStart)} • Net {fmtMoney((bankCurrent-bankStart))}</div></div>
+                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">ROI</div><div className={`text-[18px] font-extrabold mt-1 ${roi>=0?"text-[#4ade80]":"text-[#f87171]"}`}>{fmtMoney(roi)}%</div><div className="text-[10px] opacity-60 mt-1">Spent $${fmtMoney(spent)} • Won $${fmtMoney(won)}</div></div>
+                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Hit Rate</div><div className="text-[18px] font-extrabold mt-1 text-white">{fmtMoney(hitRate)}%</div><div className="text-[10px] opacity-60 mt-1">{fmtInt(totalDivWins)} wins / {fmtInt(totalGamesPlayed)} games</div></div>
+                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Avg Win</div><div className="text-[18px] font-extrabold mt-1 text-white">${totalDivWins>0?fmtMoney(won/totalDivWins):"0.00"}</div><div className="text-[10px] opacity-60 mt-1">Biggest $${fmtMoney(biggestWin)} • Losing streak {maxLosingStreak}</div></div>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-[12px] p-3">
+                  <div className="text-[10px] opacity-50 uppercase tracking-widest mb-2">Division Breakdown (Pro View)</div>
+                  <div className="space-y-1">
+                    {[1,2,3,4,5,6,7,8,9].map(d=>{
+                      const count=divCounts[d]||0;
+                      const prize=divPrizeTotals[d]||0;
+                      const odds={1:"1:134M",2:"1:19M",3:"1:1.7M",4:"1:110k",5:"1:12k",6:"1:2.5k",7:"1:1.2k",8:"1:330",9:"1:160"}[d];
+                      return <div key={d} className="flex justify-between text-[11px] py-1 border-b border-white/5 last:border-0"><span className="font-bold">Div {d} <span className="opacity-50 font-normal">({odds})</span></span><span className="opacity-70">{count}× • ${fmtMoney(prize)}</span></div>
+                    })}
+                  </div>
+                  <div className="mt-2 text-[10px] opacity-40">True Powerful Ball AU odds • Your observed hit rate vs theoretical</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest mb-2">Your Hot Numbers (most picked)</div><div className="flex flex-wrap gap-1">{hotNumbers.map(h=><div key={h.num} className="w-7 h-7 rounded-full bg-[#fbbf24] text-black flex items-center justify-center text-[11px] font-bold">{h.num}</div>)}<div className="w-full text-[10px] opacity-50 mt-2">{hotNumbers.map(h=>`${h.num}(${h.count})`).join(" • ")}</div></div></div>
+                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest mb-2">Winning Hot (drawn most)</div><div className="flex flex-wrap gap-1">{hotWinning.map(h=><div key={h.num} className="w-7 h-7 rounded-full bg-[#2f4ea6] text-white flex items-center justify-center text-[11px] font-bold">{h.num}</div>)}<div className="w-full text-[10px] opacity-50 mt-2">{hotWinning.map(h=>`${h.num}(${h.count})`).join(" • ")}</div></div></div>
+                </div>
+
+                <div className="bg-[#fbbf24]/10 border border-[#fbbf24]/20 rounded-[12px] p-3">
+                  <div className="text-[11px] font-bold text-[#fbbf24] uppercase tracking-widest">Expected Value • Pro Insight</div>
+                  <div className="mt-2 text-[11px] leading-[1.4] opacity-80">
+                    Cost $1.40/game • Jackpot ${fmtInt(jackpot)} • True Div1 odds 1 in 134,490,400 • EV = {(jackpot/134490400).toFixed(4)}/game before smaller divisions • Your cost per game ${pricePerGame} • Break-even needs jackpot ${ (pricePerGame*134490400).toLocaleString() } • You are {roi<-50?"massively -EV like all lotto":roi<0?"down but that's normal - lotto is -EV":"running hot!"}.
+                  </div>
+                  <div className="mt-2 text-[10px] opacity-50"></div>
+                </div>
+
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" onClick={()=>{ play("button"); setWinning(null); setReveal(0); setResults(null); setView("choose"); }} className="bg-[#7b4dff] text-white rounded-full py-4 font-extrabold">PLAY AGAIN</button>
+              <button type="button" onClick={()=>{play("button"); setView("title");}} className="bg-[#fbbf24] text-black rounded-full py-4 font-extrabold">TITLE • ${(jackpot/1000000).toLocaleString('en-AU', {minimumFractionDigits:1, maximumFractionDigits:1})}M →</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+const root=ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App/>);
+</script>
+</body>
+</html>

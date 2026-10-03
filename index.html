@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Powerful Ball</title>
+<title>Powerful Ball v29 - Fixed Blank + Side By Side</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Righteous&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -83,11 +83,9 @@ function App(){
   const [maxLosingStreak,setMaxLosingStreak]=useState(0);
 
   const pricePerGame=1.40;
-
   const fmtMoney = (n)=> Number(n||0).toLocaleString('en-AU', {minimumFractionDigits:2, maximumFractionDigits:2});
   const fmtInt = (n)=> Number(n||0).toLocaleString('en-AU');
   const fmtMoneySign = (n)=> `$${fmtMoney(n)}`;
-
 
   const totalCost=useMemo(()=>{
     if(mode==="Standard") return gameCount*pricePerGame;
@@ -442,6 +440,10 @@ function App(){
   }
 
   const haulItem = getSingleItemForAmount(absNet);
+  const totalNet = won - spent;
+  const absTotalNet = Math.abs(totalNet);
+  const haulItemTotal = getSingleItemForAmount(absTotalNet);
+  const isSameHaul = haulItem && haulItemTotal && haulItem.name===haulItemTotal.name && haulItem.count===haulItemTotal.count && haulItem.price===haulItemTotal.price;
 
   function isTicketFull(g){
     const need = mode==="Pick"? (pickType==="Pick6"?6:5) : mode.includes("System")? sysSize : 7;
@@ -476,7 +478,7 @@ function App(){
               <div className="bebas text-[64px] md:text-[84px] leading-[0.9] tracking-tight bg-gradient-to-b from-white via-[#fde68a] to-[#f59e0b] bg-clip-text text-transparent">POWERFUL<br/>BALL</div>
               <div className="mt-6 inline-flex flex-col items-center bg-[#111] border-2 border-[#fbbf24] rounded-full px-8 py-4">
                 <div className="text-[#fbbf24] text-[11px] font-bold tracking-[0.2em] uppercase">Current Jackpot</div>
-                <div className="text-white text-[32px] md:text-[40px] font-extrabold tracking-tight">${fmtInt(jackpot)}</div>
+                <div className="text-white text-[32px] md:text-[40px] font-extrabold tracking-tight">${jackpot.toLocaleString()}</div>
                 <div className="righteous text-[#fbbf24] text-[20px] tracking-widest -mt-1">JACKPOT</div>
               </div>
               <button type="button" onTouchStart={ensureAudio} onClick={()=>{play("fancyStart"); setView("bank");}} className="mt-8 w-full max-w-[320px] bg-[#fbbf24] text-black rounded-full py-[18px] font-extrabold text-[20px] tracking-wide">PLAY NOW →</button>
@@ -557,7 +559,7 @@ function App(){
 
           <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t p-3 z-30">
             <div className="max-w-[560px] mx-auto flex gap-2">
-              <button type="button" onClick={()=>{play("button"); if(games[0].main.length===0){ alert("Pick numbers first! Expand a ticket."); return; } setView("confirm"); }} className="flex-1 bg-[#7b4dff] text-white rounded-full py-[13px] font-extrabold text-[14px] shadow-lg">LOCK → $${fmtMoney(totalCost)}</button>
+              <button type="button" onClick={()=>{play("button"); if(games[0].main.length===0){ alert("Pick numbers first! Expand a ticket."); return; } setView("confirm"); }} className="flex-1 bg-[#7b4dff] text-white rounded-full py-[13px] font-extrabold text-[14px] shadow-lg">LOCK → ${fmtMoney(totalCost)}</button>
             </div>
           </div>
         </div>
@@ -656,36 +658,79 @@ function App(){
               <div className="mt-3 inline-flex bg-black/30 rounded-full px-4 py-1.5 text-[11px] font-bold text-white">Spent $${fmtMoney(totalCost)} • Won $${fmtMoney((results?.winAmount||0))} • {equivGames} games</div>
             </div>
 
+            
+            
             <div className="bg-white rounded-[20px] border p-5 shadow">
-              <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase">{thisNet>=0 ? "PROFIT COULD BUY..." : "YOU LOST ENOUGH TO BUY..."}</div>
-              <div className="mt-4">
-                {(()=>{
-                  if(!haulItem) return null;
-                  return <div className="bg-gradient-to-br from-[#111] to-[#222] rounded-[18px] p-5 text-white border border-[#333]">
-                    <div className="text-[11px] tracking-[0.2em] opacity-60 uppercase">{haulItem.count>1?`${haulItem.count} × ${haulItem.name}`:haulItem.name} • ${fmtMoney(haulItem.price)} ea</div>
-                    <div className="mt-3 flex items-start gap-3">
-                      <div className="text-[36px]">{haulItem.emoji}</div>
-                      <div>
-                        <div className="text-[22px] font-extrabold leading-[1.1]">{haulItem.count>1?`${haulItem.count} × `:''}{haulItem.name}</div>
-                        <div className="mt-1 text-[13px] opacity-80">{haulItem.desc}</div>
-                        <div className="mt-3 inline-flex bg-white/10 rounded-full px-3 py-1 text-[11px] font-bold">${fmtMoney(absNet)} ≈ {haulItem.count>1?`${haulItem.count} × `:''}${haulItem.price}</div>
+              {isSameHaul ? (
+                <div>
+                  <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase">{thisNet>=0 ? "THIS ROUND PROFIT COULD BUY..." : "THIS ROUND LOSS COULD HAVE BOUGHT..."}</div>
+                  <div className="mt-3">
+                    <div className="bg-gradient-to-br from-[#111] to-[#222] rounded-[18px] p-4 text-white border border-[#333]">
+                      <div className="text-[10px] tracking-[0.2em] opacity-60 uppercase">{haulItem.count>1?`${fmtInt(haulItem.count)} × ${haulItem.name}`:haulItem.name} • ${fmtMoney(haulItem.price)} ea</div>
+                      <div className="mt-2 flex items-start gap-2">
+                        <div className="text-[28px]">{haulItem.emoji}</div>
+                        <div>
+                          <div className="text-[15px] font-extrabold leading-[1.1]">{haulItem.count>1?`${fmtInt(haulItem.count)} × `:''}{haulItem.name}</div>
+                          <div className="mt-1 text-[10px] opacity-80">{haulItem.desc}</div>
+                          <div className="mt-2 inline-flex bg-white/10 rounded-full px-2 py-1 text-[10px] font-bold">${fmtMoney(absNet)} ≈ ${fmtMoney(haulItem.count>1?haulItem.total:haulItem.price)}</div>
+                          <div className="mt-1 text-[9px] opacity-60">This round: {thisNet>=0?'+':''}${fmtMoney(thisNet)} • Total: {totalNet>=0?'+':''}${fmtMoney(totalNet)} same item</div>
+                        </div>
                       </div>
                     </div>
-                  </div>;
-                })()}
-              </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase">{thisNet>=0 ? "THIS ROUND PROFIT COULD BUY..." : "THIS ROUND LOSS COULD HAVE BOUGHT..."}</div>
+                    <div className="mt-3">
+                      <div className="bg-gradient-to-br from-[#111] to-[#222] rounded-[18px] p-4 text-white border border-[#333]">
+                        <div className="text-[10px] tracking-[0.2em] opacity-60 uppercase">{haulItem.count>1?`${fmtInt(haulItem.count)} × ${haulItem.name}`:haulItem.name} • ${fmtMoney(haulItem.price)} ea</div>
+                        <div className="mt-2 flex items-start gap-2">
+                          <div className="text-[28px]">{haulItem.emoji}</div>
+                          <div>
+                            <div className="text-[15px] font-extrabold leading-[1.1]">{haulItem.count>1?`${fmtInt(haulItem.count)} × `:''}{haulItem.name}</div>
+                            <div className="mt-1 text-[10px] opacity-80">{haulItem.desc}</div>
+                            <div className="mt-2 inline-flex bg-white/10 rounded-full px-2 py-1 text-[10px] font-bold">${fmtMoney(absNet)} ≈ ${fmtMoney(haulItem.count>1?haulItem.total:haulItem.price)}</div>
+                            <div className="mt-1 text-[9px] opacity-60">This round: {thisNet>=0?'+':''}${fmtMoney(thisNet)} (Spent $${fmtMoney(totalCost)} • Won $${fmtMoney(results?.winAmount||0)})</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase">{totalNet>=0 ? "TOTAL PROFIT COULD BUY..." : "TOTAL LOSS COULD HAVE BOUGHT..."}</div>
+                    <div className="mt-3">
+                      <div className="bg-gradient-to-br from-[#1a1a2e] to-[#2a1a3e] rounded-[18px] p-4 text-white border border-[#7b4dff]/30">
+                        <div className="text-[10px] tracking-[0.2em] opacity-60 uppercase">{haulItemTotal.count>1?`${fmtInt(haulItemTotal.count)} × ${haulItemTotal.name}`:haulItemTotal.name} • ${fmtMoney(haulItemTotal.price)} ea</div>
+                        <div className="mt-2 flex items-start gap-2">
+                          <div className="text-[28px]">{haulItemTotal.emoji}</div>
+                          <div>
+                            <div className="text-[15px] font-extrabold leading-[1.1]">{haulItemTotal.count>1?`${fmtInt(haulItemTotal.count)} × `:''}{haulItemTotal.name}</div>
+                            <div className="mt-1 text-[10px] opacity-80">{haulItemTotal.desc}</div>
+                            <div className="mt-2 inline-flex bg-[#7b4dff]/20 rounded-full px-2 py-1 text-[10px] font-bold">${fmtMoney(absTotalNet)} ≈ ${fmtMoney(haulItemTotal.count>1?haulItemTotal.total:haulItemTotal.price)}</div>
+                            <div className="mt-1 text-[9px] opacity-60">Running total: {totalNet>=0?'+':''}${fmtMoney(totalNet)} (Spent $${fmtMoney(spent)} • Won $${fmtMoney(won)} • {fmtInt(totalGamesPlayed)} games)</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 bg-[#f9fafb] border border-[#e5e7eb] rounded-[12px] p-2 flex justify-between text-[10px]"><span className="text-gray-500">This round</span><span className={`font-bold ${thisNet>=0?"text-[#16a34a]":"text-[#dc2626]"}`}>{thisNet>=0?'+':''}${fmtMoney(thisNet)}</span><span className="text-gray-400">|</span><span className="text-gray-500">Total</span><span className={`font-bold ${totalNet>=0?"text-[#16a34a]":"text-[#dc2626]"}`}>{totalNet>=0?'+':''}${fmtMoney(totalNet)}</span></div>
             </div>
+
 
             <button type="button" onClick={()=>{play("tap"); setShowStats(s=>!s);}} className="w-full bg-white border rounded-full py-3 font-bold text-[13px]">{showStats?"Hide Pro Statistics ▲":"Show Pro Statistics ▼"}</button>
             {showStats && (
               <div className="bg-[#101018] border border-white/10 rounded-[20px] p-5 text-white space-y-5">
-                <div className="flex justify-between items-center"><div className="text-[12px] font-bold tracking-[0.2em] text-[#fbbf24] uppercase">Pro Statistics</div><div className="text-[10px] bg-white/10 rounded-full px-2 py-1">{fmtInt(totalDraws)} draws • {fmtInt(totalGamesPlayed)} games</div></div>
+                <div className="flex justify-between items-center"><div className="text-[12px] font-bold tracking-[0.2em] text-[#fbbf24] uppercase">Pro Statistics</div><div className="text-[10px] bg-white/10 rounded-full px-2 py-1">{totalDraws} draws • {totalGamesPlayed} games</div></div>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Bankroll</div><div className={`text-[18px] font-extrabold mt-1 ${bankCurrent>=bankStart?"text-[#4ade80]":"text-[#f87171]"}`}>${fmtMoney(bankCurrent)}</div><div className="text-[10px] opacity-60 mt-1">Start ${fmtMoney(bankStart)} • Net {fmtMoney((bankCurrent-bankStart))}</div></div>
                   <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">ROI</div><div className={`text-[18px] font-extrabold mt-1 ${roi>=0?"text-[#4ade80]":"text-[#f87171]"}`}>{fmtMoney(roi)}%</div><div className="text-[10px] opacity-60 mt-1">Spent $${fmtMoney(spent)} • Won $${fmtMoney(won)}</div></div>
-                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Hit Rate</div><div className="text-[18px] font-extrabold mt-1 text-white">{fmtMoney(hitRate)}%</div><div className="text-[10px] opacity-60 mt-1">{fmtInt(totalDivWins)} wins / {fmtInt(totalGamesPlayed)} games</div></div>
-                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Avg Win</div><div className="text-[18px] font-extrabold mt-1 text-white">${totalDivWins>0?fmtMoney(won/totalDivWins):"0.00"}</div><div className="text-[10px] opacity-60 mt-1">Biggest $${fmtMoney(biggestWin)} • Losing streak {maxLosingStreak}</div></div>
+                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Hit Rate</div><div className="text-[18px] font-extrabold mt-1 text-white">{fmtMoney(hitRate)}%</div><div className="text-[10px] opacity-60 mt-1">{totalDivWins} wins / {totalGamesPlayed} games</div></div>
+                  <div className="bg-white/5 border border-white/10 rounded-[12px] p-3"><div className="text-[10px] opacity-50 uppercase tracking-widest">Avg Win</div><div className="text-[18px] font-extrabold mt-1 text-white">${totalDivWins>0?(won/totalDivWins).toLocaleString('en-AU', {minimumFractionDigits:2, maximumFractionDigits:2}):"0.00"}</div><div className="text-[10px] opacity-60 mt-1">Biggest ${fmtMoney(biggestWin)} • Losing streak {maxLosingStreak}</div></div>
                 </div>
 
                 <div className="bg-white/5 border border-white/10 rounded-[12px] p-3">
@@ -709,7 +754,7 @@ function App(){
                 <div className="bg-[#fbbf24]/10 border border-[#fbbf24]/20 rounded-[12px] p-3">
                   <div className="text-[11px] font-bold text-[#fbbf24] uppercase tracking-widest">Expected Value • Pro Insight</div>
                   <div className="mt-2 text-[11px] leading-[1.4] opacity-80">
-                    Cost $1.40/game • Jackpot ${fmtInt(jackpot)} • True Div1 odds 1 in 134,490,400 • EV = {(jackpot/134490400).toFixed(4)}/game before smaller divisions • Your cost per game ${pricePerGame} • Break-even needs jackpot ${ (pricePerGame*134490400).toLocaleString() } • You are {roi<-50?"massively -EV like all lotto":roi<0?"down but that's normal - lotto is -EV":"running hot!"}.
+                    Cost $1.40/game • Jackpot ${jackpot.toLocaleString()} • True Div1 odds 1 in 134,490,400 • EV = {(jackpot/134490400).toFixed(4)}/game before smaller divisions • Your cost per game ${pricePerGame} • Break-even needs jackpot ${ (pricePerGame*134490400).toLocaleString() } • You are {roi<-50?"massively -EV like all lotto":roi<0?"down but that's normal - lotto is -EV":"running hot!"}.
                   </div>
                   <div className="mt-2 text-[10px] opacity-50"></div>
                 </div>
@@ -719,7 +764,7 @@ function App(){
 
             <div className="grid grid-cols-2 gap-3">
               <button type="button" onClick={()=>{ play("button"); setWinning(null); setReveal(0); setResults(null); setView("choose"); }} className="bg-[#7b4dff] text-white rounded-full py-4 font-extrabold">PLAY AGAIN</button>
-              <button type="button" onClick={()=>{play("button"); setView("title");}} className="bg-[#fbbf24] text-black rounded-full py-4 font-extrabold">TITLE • ${(jackpot/1000000).toLocaleString('en-AU', {minimumFractionDigits:1, maximumFractionDigits:1})}M →</button>
+              <button type="button" onClick={()=>{play("button"); setView("title");}} className="bg-[#fbbf24] text-black rounded-full py-4 font-extrabold">TITLE • ${(jackpot/1000000).toFixed(1)}M →</button>
             </div>
           </div>
         </div>
